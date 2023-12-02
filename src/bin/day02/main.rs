@@ -26,20 +26,14 @@ fn part1_example() -> Vec<Game> {
     .expect("example should be valid")
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Stock {
     pub counts: HashMap<String, u32>,
 }
 
 impl Stock {
-    fn new() -> Stock {
-        Stock {
-            counts: HashMap::new(),
-        }
-    }
-
-    fn power(&self) -> u64 {
-        self.counts.values().map(|val| u64::from(*val)).product()
+    fn power(&self) -> u32 {
+        self.counts.values().product()
     }
 
     fn get(&self, colour: &str) -> &u32 {
@@ -88,20 +82,19 @@ fn str_to_num(s: &str) -> Result<u32, Fail> {
 impl TryFrom<&str> for Turn {
     type Error = Fail;
 
-    fn try_from(turn: &str) -> Result<Self, Self::Error> {
-        let mut counts = HashMap::new();
-        for pair in turn.split(", ") {
-            match pair.split_once(' ') {
-                Some((ns, colour)) => {
-                    let count = str_to_num(ns)?;
-                    *counts.entry(colour.to_string()).or_insert(0) += count;
-                }
-                None => {
-                    return Err(Fail(format!("invalid pair: {pair}")));
-                }
-            }
-        }
-        Ok(Turn { counts })
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Ok(Turn {
+            counts: s
+                .split(", ")
+                .map(|pair| match pair.split_once(' ') {
+                    Some((ns, colour)) => match str_to_num(ns) {
+                        Ok(n) => Ok((colour.to_string(), n)),
+                        Err(e) => Err(e),
+                    },
+                    None => Err(Fail(format!("invalid pair: {pair}"))),
+                })
+                .collect::<Result<HashMap<String, u32>, Fail>>()?,
+        })
     }
 }
 
@@ -113,7 +106,7 @@ struct Game {
 
 impl Game {
     fn min_requirement(&self) -> Stock {
-        self.turns.iter().fold(Stock::new(), |mut acc, turn| {
+        self.turns.iter().fold(Stock::default(), |mut acc, turn| {
             turn.update_requirement(&mut acc);
             acc
         })
@@ -127,14 +120,13 @@ impl TryFrom<&str> for Game {
         match line.split_once(": ") {
             Some((prefix, counts_str)) => match prefix.strip_prefix("Game ") {
                 None => Err(Fail(format!("prefix should start with 'Game ': {prefix}"))),
-                Some(id_str) => {
-                    let id: u32 = str_to_num(id_str)?;
-                    let mut turns: Vec<Turn> = Vec::new();
-                    for turn in counts_str.split("; ") {
-                        turns.push(Turn::try_from(turn)?);
-                    }
-                    Ok(Game { id, turns })
-                }
+                Some(id_str) => Ok(Game {
+                    id: str_to_num(id_str)?,
+                    turns: counts_str
+                        .split("; ")
+                        .map(|turn| Turn::try_from(turn))
+                        .collect::<Result<Vec<Turn>, Fail>>()?,
+                }),
             },
             None => Err(Fail(format!("invalid line contains no id: {line}"))),
         }
@@ -173,7 +165,7 @@ fn test_part1() {
     assert_eq!(got, 8);
 }
 
-fn part2(games: &[Game]) -> u64 {
+fn part2(games: &[Game]) -> u32 {
     games
         .iter()
         .map(|game| game.min_requirement().power())
