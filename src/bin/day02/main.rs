@@ -124,7 +124,7 @@ impl TryFrom<&str> for Game {
                     id: str_to_num(id_str)?,
                     turns: counts_str
                         .split("; ")
-                        .map(|turn| Turn::try_from(turn))
+                        .map(Turn::try_from)
                         .collect::<Result<Vec<Turn>, Fail>>()?,
                 }),
             },
