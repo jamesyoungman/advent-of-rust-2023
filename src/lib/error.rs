@@ -11,3 +11,7 @@ impl Display for Fail {
 }
 
 impl std::error::Error for Fail {}
+
+pub fn fail_from_error(e: &dyn std::error::Error) -> Fail {
+    Fail(e.to_string())
+}
