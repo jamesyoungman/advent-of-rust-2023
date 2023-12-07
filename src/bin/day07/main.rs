@@ -1,11 +1,11 @@
+use std::collections::HashMap;
 use std::str;
 
 use lib::error::Fail;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq, Hash)]
 pub enum Label {
-    Number(char),
-    Ten,
+    Number(u8),
     Jack,
     Queen,
     King,
@@ -17,8 +17,10 @@ impl TryFrom<char> for Label {
 
     fn try_from(ch: char) -> Result<Label, Self::Error> {
         match ch {
-            '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => Ok(Label::Number(ch)),
-            'T' => Ok(Label::Ten),
+            '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => Ok(Label::Number(
+                ch.to_digit(10).expect("valid decimal digit") as u8,
+            )),
+            'T' => Ok(Label::Number(10_u8)),
             'J' => Ok(Label::Jack),
             'Q' => Ok(Label::Queen),
             'K' => Ok(Label::King),
@@ -28,379 +30,383 @@ impl TryFrom<char> for Label {
     }
 }
 
-impl Label {}
+#[test]
+fn test_label_parsing() {
+    assert_eq!(Label::try_from('2'), Ok(Label::Number(2)));
+    assert_eq!(Label::try_from('3'), Ok(Label::Number(3)));
+    assert_eq!(Label::try_from('4'), Ok(Label::Number(4)));
+    assert_eq!(Label::try_from('5'), Ok(Label::Number(5)));
+    assert_eq!(Label::try_from('6'), Ok(Label::Number(6)));
+    assert_eq!(Label::try_from('7'), Ok(Label::Number(7)));
+    assert_eq!(Label::try_from('8'), Ok(Label::Number(8)));
+    assert_eq!(Label::try_from('9'), Ok(Label::Number(9)));
+    assert_eq!(Label::try_from('T'), Ok(Label::Number(10)));
 
-trait Card: From<Label> + Copy + Clone + PartialEq + Eq + PartialOrd + Ord + std::fmt::Debug {}
+    assert_eq!(Label::try_from('J'), Ok(Label::Jack));
+    assert_eq!(Label::try_from('Q'), Ok(Label::Queen));
+    assert_eq!(Label::try_from('K'), Ok(Label::King));
+    assert_eq!(Label::try_from('A'), Ok(Label::Ace));
 
-mod part1 {
-    use std::cmp::Ordering;
+    assert!(Label::try_from('0').is_err());
+    assert!(Label::try_from('1').is_err());
+    assert!(Label::try_from('Z').is_err());
+}
 
-    use lib::error::Fail;
-
-    use std::collections::HashMap;
-
-    use super::parse_input;
-    use super::Card;
-    use super::HandType;
-    use super::Label;
-    #[cfg(test)]
-    use super::{get_example, parse_hand, parse_line, Hand};
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct Part1Card {
-        pub value: Label,
-    }
-
-    impl From<Label> for Part1Card {
-        fn from(v: Label) -> Part1Card {
-            Part1Card { value: v }
+impl Label {
+    fn part1_label_rank(&self) -> u8 {
+        match self {
+            Label::Number(value) => *value,
+            Label::Jack => 11,
+            Label::Queen => 12,
+            Label::King => 13,
+            Label::Ace => 14,
         }
     }
 
-    impl Ord for Part1Card {
-        fn cmp(&self, other: &Part1Card) -> Ordering {
-            fn part1_label_rank(v: Label) -> u8 {
-                match v {
-                    Label::Number(ch) => ch
-                        .to_digit(10)
-                        .expect("number card labels must be valid digits")
-                        as u8,
-                    Label::Ten => 10,
-                    Label::Jack => 11,
-                    Label::Queen => 12,
-                    Label::King => 13,
-                    Label::Ace => 14,
-                }
+    fn part2_label_rank(&self) -> u8 {
+        match self {
+            Label::Jack => 0,
+            Label::Number(value) => *value,
+            // Jack has lowest rank
+            Label::Queen => 12,
+            Label::King => 13,
+            Label::Ace => 14,
+        }
+    }
+}
+
+fn parse_hand(s: &str) -> Result<[Label; 5], Fail> {
+    let v: Vec<Label> = s
+        .chars()
+        .map(Label::try_from)
+        .collect::<Result<Vec<Label>, Fail>>()?;
+    match v.as_slice() {
+        [l1, l2, l3, l4, l5] => Ok([*l1, *l2, *l3, *l4, *l5]),
+        _ => Err(Fail(format!("hand contains {} cards, expected 5", v.len()))),
+    }
+}
+
+type ParsedLine = ([Label; 5], u32);
+
+fn parse_line(s: &str) -> Result<ParsedLine, Fail> {
+    match s.split_once(' ') {
+        Some((hand, bid)) => Ok((
+            parse_hand(hand)?,
+            bid.parse::<u32>()
+                .map_err(|e| Fail(format!("{bid} is not a valid bid: {e}")))?,
+        )),
+        None => Err(Fail(format!("expected to find a space in {s}"))),
+    }
+}
+
+fn parse_input(s: &str) -> Result<Vec<ParsedLine>, Fail> {
+    s.split_terminator('\n')
+        .map(parse_line)
+        .collect::<Result<Vec<ParsedLine>, Fail>>()
+}
+
+#[test]
+fn test_parse_line() {
+    use Label::*;
+    assert_eq!(
+        parse_line("KTJJT 220").expect("valid"),
+        ([King, Number(10), Jack, Jack, Number(10)], 220)
+    );
+}
+
+pub fn get_part1_hand_type(labels: &[Label; 5]) -> Result<HandType, Fail> {
+    let counts: HashMap<Label, usize> = labels.iter().fold(HashMap::new(), |mut acc, card| {
+        acc.entry(*card)
+            .and_modify(|counter| *counter += 1)
+            .or_insert(1);
+        acc
+    });
+    match counts.values().max() {
+        None => Err(Fail(format!(
+            "Hands must contain 5 cards, this one contains 0: {labels:?}"
+        ))),
+        Some(5) => Ok(HandType::FiveOfAKind),
+        Some(4) => Ok(HandType::FourOfAKind),
+        Some(3) => {
+            if counts.len() == 2 {
+                Ok(HandType::FullHouse)
+            } else if counts.len() == 3 {
+                Ok(HandType::ThreeOfAKind)
+            } else {
+                Err(Fail(format!("did not understand hand type of {labels:?}")))
             }
-
-            part1_label_rank(self.value).cmp(&part1_label_rank(other.value))
         }
+        Some(2) => {
+            // Distinguish "Two pair" from "One pair".
+            if counts.len() == 3 {
+                Ok(HandType::TwoPair)
+            } else if counts.len() == 4 {
+                Ok(HandType::OnePair)
+            } else {
+                Err(Fail(format!("did not understand hand type of {labels:?}")))
+            }
+        }
+        Some(1) => Ok(HandType::HighCard),
+        Some(n) => Err(Fail(format!(
+            "unexpected max count of same label {n}: {labels:?}"
+        ))),
     }
+}
 
-    impl PartialEq for Part1Card {
-        fn eq(&self, other: &Part1Card) -> bool {
-            self.cmp(other) == Ordering::Equal
-        }
+#[test]
+fn test_part1_hand_type() {
+    fn get_type(s: &str) -> HandType {
+        let labels = parse_hand(s).expect("test input should be valid");
+        get_part1_hand_type(&labels).expect("test input should be valid")
     }
+    assert_eq!(get_type("32T3K"), HandType::OnePair);
+    assert_eq!(get_type("KK677"), HandType::TwoPair);
+    assert_eq!(get_type("T55J5"), HandType::ThreeOfAKind);
+    assert_eq!(get_type("KTJJT"), HandType::TwoPair);
+    assert_eq!(get_type("QQQJA"), HandType::ThreeOfAKind);
+}
 
-    impl Eq for Part1Card {}
-
-    impl PartialOrd for Part1Card {
-        fn partial_cmp(&self, other: &Part1Card) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-
-    #[test]
-    fn test_card_ordering() {
-        fn card(value: Label) -> Part1Card {
-            Part1Card { value: value }
-        }
-        use Label::*;
-        assert!(card(Number('3')) > card(Number('2')));
-        assert!(card(Number('4')) > card(Number('3')));
-        assert!(card(Number('5')) > card(Number('4')));
-        assert!(card(Number('6')) > card(Number('5')));
-        assert!(card(Number('7')) > card(Number('6')));
-        assert!(card(Number('8')) > card(Number('7')));
-        assert!(card(Number('9')) > card(Number('8')));
-        assert!((card(Ten)) > card(Number('9')));
-        assert!(card(Jack) > card(Ten));
-        assert!(card(Queen) > card(Jack));
-        assert!(card(King) > card(Queen));
-        assert!(card(Ace) > card(King));
-    }
-
-    impl Card for Part1Card {}
-
-    pub fn get_hand_type(s: &str) -> Result<HandType, Fail> {
-        if s.len() != 5 {
-            return Err(Fail(format!(
-                "valid hands have 5 cards, this hand has {}: {s}",
-                s.len()
-            )));
-        }
-        let counts: HashMap<char, usize> = s.chars().fold(HashMap::new(), |mut acc, card| {
-            acc.entry(card)
+pub fn get_part2_hand_type(labels: &[Label; 5]) -> Result<HandType, Fail> {
+    let non_jack_counts: HashMap<Label, usize> = labels
+        .iter()
+        .filter(|label| **label != Label::Jack)
+        .fold(HashMap::new(), |mut acc, card| {
+            acc.entry(*card)
                 .and_modify(|counter| *counter += 1)
                 .or_insert(1);
             acc
         });
-        match counts.values().max() {
-            None => Err(Fail(format!(
-                "Hands must contain 5 cards, this one contains 0: [{s}]"
-            ))),
-            Some(5) => Ok(HandType::FiveOfAKind),
-            Some(4) => Ok(HandType::FourOfAKind),
-            Some(3) => {
-                if counts.len() == 2 {
-                    Ok(HandType::FullHouse)
-                } else if counts.len() == 3 {
-                    Ok(HandType::ThreeOfAKind)
-                } else {
-                    Err(Fail(format!("did not understand hand type of {s}")))
+    let jack_count = labels.iter().filter(|label| **label == Label::Jack).count();
+
+    if let Some(largest_non_jack_count) = non_jack_counts.values().max() {
+        match largest_non_jack_count + jack_count {
+            5 => Ok(HandType::FiveOfAKind),
+            4 => Ok(HandType::FourOfAKind),
+            3 => {
+                // GGGXX (Full house) or GGGXY (Three of a kind)
+                // or GGJXY (Three of a kind) or GJJXY (three of a
+                // kind) (where X, Y, G are non-jack cards).
+                //
+                // Can't be JJJXY or JJJXX as these are the 4 and
+                // 5 cases above.
+                match non_jack_counts.len() {
+                    2 => Ok(HandType::FullHouse),    // GGGXX
+                    3 => Ok(HandType::ThreeOfAKind), // GGGXY or GGJXY or GJJXY.
+                    _ => {
+                        panic!("failed to identify hand type of {labels:?}");
+                    }
                 }
             }
-            Some(2) => {
-                // Distinguish "Two pair" from "One pair".
-                if counts.len() == 3 {
-                    Ok(HandType::TwoPair)
-                } else if counts.len() == 4 {
-                    Ok(HandType::OnePair)
-                } else {
-                    Err(Fail(format!("did not understand hand type of {s}")))
+            2 => {
+                // GGXYZ (one pair) or GJXYZ (one pair) or GGXXY (two pair).
+                match non_jack_counts.len() {
+                    4 => Ok(HandType::OnePair),
+                    3 => Ok(HandType::TwoPair),
+                    _ => {
+                        panic!("failed to identify hand type of {labels:?}");
+                    }
                 }
             }
-            Some(1) => Ok(HandType::HighCard),
-            Some(n) => Err(Fail(format!("unexpected max count of same label {n}: {s}"))),
+            1 => Ok(HandType::HighCard), // GWXYZ
+            other => {
+                panic!("failed to identify hand type of {labels:?} with total count {other}");
+            }
         }
-    }
-
-    #[test]
-    fn test_get_hand_type_valid() {
-        use HandType::*;
-        assert_eq!(get_hand_type("AAAAA"), Ok(FiveOfAKind));
-        assert_eq!(get_hand_type("AA8AA"), Ok(FourOfAKind));
-        assert_eq!(get_hand_type("23332"), Ok(FullHouse));
-        assert_eq!(get_hand_type("TTT98"), Ok(ThreeOfAKind));
-        assert_eq!(get_hand_type("23432"), Ok(TwoPair));
-        assert_eq!(get_hand_type("A23A4"), Ok(OnePair));
-        assert_eq!(get_hand_type("23456"), Ok(HighCard));
-    }
-
-    #[test]
-    fn test_get_hand_type_invalid_count() {
-        assert!(get_hand_type("").is_err());
-        assert!(get_hand_type("2").is_err());
-        assert!(get_hand_type("22").is_err());
-        assert!(get_hand_type("333").is_err());
-        assert!(get_hand_type("4444").is_err());
-        assert!(get_hand_type("666666").is_err());
-    }
-
-    #[test]
-    fn test_get_hand_type_valid_label() {
-        assert!(get_hand_type("AAAAA").is_ok());
-        assert!(get_hand_type("22222").is_ok());
-        assert!(get_hand_type("33333").is_ok());
-        assert!(get_hand_type("44444").is_ok());
-        assert!(get_hand_type("55555").is_ok());
-        assert!(get_hand_type("66666").is_ok());
-        assert!(get_hand_type("77777").is_ok());
-        assert!(get_hand_type("88888").is_ok());
-        assert!(get_hand_type("99999").is_ok());
-        assert!(get_hand_type("TTTTT").is_ok());
-        assert!(get_hand_type("JJJJJ").is_ok());
-        assert!(get_hand_type("QQQQQ").is_ok());
-        assert!(get_hand_type("KKKKK").is_ok());
-    }
-
-    #[test]
-    fn test_hand_comparison() {
-        fn parse(s: &str) -> Result<Hand<Part1Card>, Fail> {
-            parse_hand::<Part1Card>(s, get_hand_type)
-        }
-        assert!(parse("32T3K").unwrap() < parse("KTJJT").unwrap());
-        assert!(parse("KTJJT").unwrap() < parse("KK677").unwrap());
-        assert!(parse("KK677").unwrap() < parse("T55J5").unwrap());
-        assert!(parse("T55J5").unwrap() < parse("QQQJA").unwrap());
-    }
-
-    pub fn solve(s: &str) -> u32 {
-        let mut hands = parse_input::<Part1Card>(s, get_hand_type).expect("input should be valid");
-        hands.sort();
-        hands
-            .iter()
-            .enumerate()
-            .map(|(i, (_hand, bid))| (1 + i as u32) * bid)
-            .sum()
-    }
-
-    #[test]
-    fn test_solve() {
-        assert_eq!(solve(&get_example()), 6440);
-    }
-
-    #[test]
-    fn test_parse_line() {
-        use Label::*;
-        fn card(value: Label) -> Part1Card {
-            Part1Card { value: value }
-        }
-        assert_eq!(
-            parse_line::<Part1Card>("KTJJT 220", get_hand_type),
-            Ok((
-                Hand {
-                    hand_type: HandType::TwoPair,
-                    cards: [card(King), card(Ten), card(Jack), card(Jack), card(Ten),],
-                },
-                220
-            ))
-        );
+    } else {
+        Ok(HandType::FiveOfAKind) // only jacks
     }
 }
 
-mod part2 {
-    use std::cmp::Ordering;
-    use std::collections::HashMap;
-
-    use lib::error::Fail;
-
-    use super::parse_input;
-    use super::Card;
-    use super::HandType;
-    use super::Label;
-    #[cfg(test)]
-    use super::{get_example, parse_hand, Hand};
-
-    #[derive(Debug, Clone, Copy)]
-    pub struct Part2Card {
-        pub value: Label,
+#[test]
+fn test_part2_hand_type() {
+    fn get_type(s: &str) -> HandType {
+        let labels = parse_hand(s).expect("test input should be valid");
+        get_part2_hand_type(&labels).expect("test input should be valid")
     }
+    assert_eq!(get_type("32T3K"), HandType::OnePair);
+    assert_eq!(get_type("KK677"), HandType::TwoPair);
+    assert_eq!(get_type("T55J5"), HandType::FourOfAKind);
+    assert_eq!(get_type("KTJJT"), HandType::FourOfAKind);
+    assert_eq!(get_type("QQQJA"), HandType::FourOfAKind);
+}
 
-    impl From<Label> for Part2Card {
-        fn from(v: Label) -> Part2Card {
-            Part2Card { value: v }
-        }
-    }
+fn part1_sort_key(labels: &[Label; 5]) -> Result<SortKey, Fail> {
+    Ok(SortKey {
+        hand_type: get_part1_hand_type(labels)?,
+        label_indices: [
+            Label::part1_label_rank(&labels[0]),
+            Label::part1_label_rank(&labels[1]),
+            Label::part1_label_rank(&labels[2]),
+            Label::part1_label_rank(&labels[3]),
+            Label::part1_label_rank(&labels[4]),
+        ],
+    })
+}
 
-    impl Ord for Part2Card {
-        fn cmp(&self, other: &Part2Card) -> Ordering {
-            fn part2_label_rank(v: Label) -> u8 {
-                match v {
-                    Label::Jack => 0,
-                    Label::Number(ch) => ch
-                        .to_digit(10)
-                        .expect("number card labels must be valid digits")
-                        as u8,
-                    Label::Ten => 10,
-                    // Jack has lowest rank
-                    Label::Queen => 12,
-                    Label::King => 13,
-                    Label::Ace => 14,
+fn part2_sort_key(labels: &[Label; 5]) -> Result<SortKey, Fail> {
+    Ok(SortKey {
+        hand_type: get_part2_hand_type(labels)?,
+        label_indices: [
+            Label::part2_label_rank(&labels[0]),
+            Label::part2_label_rank(&labels[1]),
+            Label::part2_label_rank(&labels[2]),
+            Label::part2_label_rank(&labels[3]),
+            Label::part2_label_rank(&labels[4]),
+        ],
+    })
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
+pub struct SortKey {
+    hand_type: HandType,
+    label_indices: [u8; 5],
+}
+
+type SortKeyFn = fn(&[Label; 5]) -> Result<SortKey, Fail>;
+
+fn rank_hands(hands: &[ParsedLine], make_key: SortKeyFn) -> Result<Vec<(usize, u32)>, Fail> {
+    let mut unsorted_hands: Vec<_> = hands
+        .iter()
+        .map(|(labels, bid)| make_key(labels).map(|labels| (labels, *bid)))
+        .collect::<Result<Vec<(SortKey, u32)>, Fail>>()?;
+    unsorted_hands.sort();
+    Ok(unsorted_hands
+        .iter()
+        .enumerate()
+        .map(|(i, (_labels, bid))| (i + 1, *bid))
+        .collect())
+}
+
+trait Card: From<Label> + Copy + Clone + PartialEq + Eq + PartialOrd + Ord + std::fmt::Debug {}
+
+#[test]
+fn test_part1_card_ordering() {
+    use Label::*;
+    assert!(Number(3).part1_label_rank() > Number(2).part1_label_rank());
+    assert!(Number(4).part1_label_rank() > Number(3).part1_label_rank());
+    assert!(Number(5).part1_label_rank() > Number(4).part1_label_rank());
+    assert!(Number(6).part1_label_rank() > Number(5).part1_label_rank());
+    assert!(Number(7).part1_label_rank() > Number(6).part1_label_rank());
+    assert!(Number(8).part1_label_rank() > Number(7).part1_label_rank());
+    assert!(Number(9).part1_label_rank() > Number(8).part1_label_rank());
+    assert!(Number(10).part1_label_rank() > Number(9).part1_label_rank());
+    assert!(Jack.part1_label_rank() > Number(10).part1_label_rank());
+    assert!(Queen.part1_label_rank() > Jack.part1_label_rank());
+    assert!(King.part1_label_rank() > Queen.part1_label_rank());
+    assert!(Ace.part1_label_rank() > King.part1_label_rank());
+}
+
+#[test]
+fn test_part1_hand_comparison() {
+    fn get_sort_key(s: &str) -> SortKey {
+        match parse_hand(s) {
+            Ok(labels) => match part1_sort_key(&labels) {
+                Ok(result) => result,
+                Err(e) => {
+                    panic!("invalid test input {labels:?}: {e}");
                 }
+            },
+            Err(e) => {
+                panic!("invalid test input {s}: {e}");
             }
-            part2_label_rank(self.value).cmp(&part2_label_rank(other.value))
         }
     }
+    assert!(get_sort_key("32T3K") < get_sort_key("KTJJT"));
+    assert!(get_sort_key("KTJJT") < get_sort_key("KK677"));
+    assert!(get_sort_key("KK677") < get_sort_key("T55J5"));
+    assert!(get_sort_key("T55J5") < get_sort_key("QQQJA"));
 
-    impl PartialEq for Part2Card {
-        fn eq(&self, other: &Part2Card) -> bool {
-            self.cmp(other) == Ordering::Equal
-        }
-    }
+    assert_eq!(get_sort_key("T55J5"), get_sort_key("T55J5"));
+}
 
-    impl Eq for Part2Card {}
-
-    impl PartialOrd for Part2Card {
-        fn partial_cmp(&self, other: &Part2Card) -> Option<Ordering> {
-            Some(self.cmp(other))
-        }
-    }
-
-    impl Card for Part2Card {}
-
-    pub fn get_hand_type(s: &str) -> Result<HandType, Fail> {
-        if s.len() != 5 {
-            return Err(Fail(format!(
-                "valid hands have 5 cards, this hand has {}: {s}",
-                s.len()
-            )));
-        }
-        let non_jack_counts: HashMap<char, usize> =
-            s.chars()
-                .filter(|ch| *ch != 'J')
-                .fold(HashMap::new(), |mut acc, card| {
-                    acc.entry(card)
-                        .and_modify(|counter| *counter += 1)
-                        .or_insert(1);
-                    acc
-                });
-        let jack_count = s.chars().filter(|ch| *ch == 'J').count();
-
-        if let Some(largest_non_jack_count) = non_jack_counts.values().max() {
-            match dbg!(largest_non_jack_count) + dbg!(jack_count) {
-                5 => Ok(HandType::FiveOfAKind),
-                4 => Ok(HandType::FourOfAKind),
-                3 => {
-                    // GGGXX (Full house) or GGGXY (Three of a kind)
-                    // or GGJXY (Three of a kind) or GJJXY (three of a
-                    // kind) (where X, Y, G are non-jack cards).
-                    //
-                    // Can't be JJJXY or JJJXX as these are the 4 and
-                    // 5 cases above.
-                    match non_jack_counts.len() {
-                        2 => Ok(HandType::FullHouse),    // GGGXX
-                        3 => Ok(HandType::ThreeOfAKind), // GGGXY or GGJXY or GJJXY.
-                        _ => {
-                            panic!("failed to identify hand type of {s}");
-                        }
-                    }
+#[test]
+fn test_part2_hand_comparison() {
+    fn get_sort_key(s: &str) -> SortKey {
+        match parse_hand(s) {
+            Ok(labels) => match part2_sort_key(&labels) {
+                Ok(result) => result,
+                Err(e) => {
+                    panic!("invalid test input: {e}");
                 }
-                2 => {
-                    // GGXYZ (one pair) or GJXYZ (one pair) or GGXXY (two pair).
-                    match non_jack_counts.len() {
-                        4 => Ok(HandType::OnePair),
-                        3 => Ok(HandType::TwoPair),
-                        _ => {
-                            panic!("failed to identify hand type of {s}");
-                        }
-                    }
-                }
-                1 => Ok(HandType::HighCard), // GWXYZ
-                other => {
-                    panic!("failed to identify hand type of {s} with total count {other}");
-                }
+            },
+            Err(e) => {
+                panic!("invalid test input: {e}");
             }
-        } else {
-            Ok(HandType::FiveOfAKind) // only jacks
+        }
+    }
+    assert!(get_sort_key("32T3K") < get_sort_key("KK677"));
+    assert!(get_sort_key("KK677") < get_sort_key("T55J5"));
+    assert!(get_sort_key("T55J5") < get_sort_key("QQQJA"));
+    assert!(get_sort_key("QQQJA") < get_sort_key("KTJJT"));
+    assert!(get_sort_key("JKKK2") < get_sort_key("QQQQ2"));
+    assert!(get_sort_key("JJJJJ") < get_sort_key("22222"));
+
+    assert!(get_sort_key("AAKKJ") < get_sort_key("AAKKK"));
+    assert!(get_sort_key("AAKKJ") > get_sort_key("AAKKQ"));
+}
+
+#[test]
+fn test_get_part1_hand_type_valid() {
+    use HandType::*;
+    fn get_hand_type(s: &str) -> HandType {
+        match parse_hand(s) {
+            Ok(labels) => match part1_sort_key(&labels) {
+                Ok(SortKey {
+                    hand_type,
+                    label_indices: _,
+                }) => hand_type,
+                Err(e) => {
+                    panic!("invalid test input {labels:?}: {e}");
+                }
+            },
+            Err(e) => {
+                panic!("invalid test input {s}: {e}");
+            }
         }
     }
 
-    #[test]
-    fn test_hand_type() {
-        fn parse(s: &str) -> Hand<Part2Card> {
-            parse_hand::<Part2Card>(s, get_hand_type).expect("hand should be valid")
-        }
-        assert_eq!(parse("32T3K").get_type(), HandType::OnePair);
-        assert_eq!(parse("KK677").get_type(), HandType::TwoPair);
+    assert_eq!(get_hand_type("AAAAA"), FiveOfAKind);
+    assert_eq!(get_hand_type("AA8AA"), FourOfAKind);
+    assert_eq!(get_hand_type("23332"), FullHouse);
+    assert_eq!(get_hand_type("TTT98"), ThreeOfAKind);
+    assert_eq!(get_hand_type("23432"), TwoPair);
+    assert_eq!(get_hand_type("A23A4"), OnePair);
+    assert_eq!(get_hand_type("23456"), HighCard);
+}
 
-        assert_eq!(parse("T55J5").get_type(), HandType::FourOfAKind);
-        assert_eq!(parse("KTJJT").get_type(), HandType::FourOfAKind);
-        assert_eq!(parse("QQQJA").get_type(), HandType::FourOfAKind);
+#[test]
+fn test_get_part1_hand_type_invalid_count() {
+    fn get_hand_type(s: &str) -> Result<HandType, Fail> {
+        parse_hand(s).and_then(|labels| get_part1_hand_type(&labels))
     }
 
-    #[test]
-    fn test_hand_comparison() {
-        fn parse(s: &str) -> Hand<Part2Card> {
-            parse_hand::<Part2Card>(s, get_hand_type).expect("hand should be valid")
-        }
-        assert!(parse("32T3K") < parse("KK677"));
+    assert!(get_hand_type("").is_err());
+    assert!(get_hand_type("2").is_err());
+    assert!(get_hand_type("22").is_err());
+    assert!(get_hand_type("333").is_err());
+    assert!(get_hand_type("4444").is_err());
+    assert!(get_hand_type("666666").is_err());
+}
 
-        assert!(parse("KK677") < parse("T55J5"));
+pub fn solve(lines: &[ParsedLine], make_key: SortKeyFn) -> Result<u64, Fail> {
+    Ok(rank_hands(lines, make_key)?
+        .into_iter()
+        .map(|(rank, bid)| (rank as u64) * (bid as u64))
+        .sum())
+}
 
-        assert!(parse("T55J5") < parse("QQQJA"));
-        assert!(parse("QQQJA") < parse("KTJJT"));
-
-        assert!(parse("JKKK2") < parse("QQQQ2"));
-
-        assert!(parse("JJJJJ") < parse("22222"));
-    }
-
-    pub fn solve(s: &str) -> u32 {
-        let mut hands = parse_input::<Part2Card>(s, get_hand_type).expect("input should be valid");
-        hands.sort();
-        hands
-            .iter()
-            .enumerate()
-            .map(|(i, (_hand, bid))| (1 + i as u32) * bid)
-            .sum()
-    }
-
-    #[test]
-    fn test_solve() {
-        assert_eq!(solve(&get_example()), 5905);
-    }
+#[test]
+fn test_solve() {
+    const INPUT_TEXT: &str = concat!(
+        "32T3K 765\n",
+        "T55J5 684\n",
+        "KK677 28\n",
+        "KTJJT 220\n",
+        "QQQJA 483\n",
+    );
+    let input = parse_input(INPUT_TEXT).expect("example input should be valid");
+    assert_eq!(solve(&input, part1_sort_key), Ok(6440));
+    assert_eq!(solve(&input, part2_sort_key), Ok(5905));
 }
 
 #[derive(Debug, PartialOrd, Ord, PartialEq, Eq, Copy, Clone)]
@@ -421,131 +427,6 @@ fn test_hand_type_ordering() {
     assert!(TwoPair > OnePair);
 }
 
-#[derive(Debug, PartialOrd, Ord, PartialEq, Eq)]
-struct Hand<C: Card> {
-    hand_type: HandType,
-    cards: [C; 5],
-}
-
-impl<C: Card> Hand<C> {
-    #[cfg(test)]
-    fn get_type(&self) -> HandType {
-        self.hand_type
-    }
-}
-
-fn parse_hand<C: Card>(
-    s: &str,
-    hand_type_selector: fn(&str) -> Result<HandType, Fail>,
-) -> Result<Hand<C>, Fail> {
-    let cards: Vec<Label> = s
-        .chars()
-        .take(6)
-        .map(Label::try_from)
-        .collect::<Result<Vec<Label>, Fail>>()?;
-    let cards: Vec<C> = cards.iter().map(|value| C::from(*value)).collect();
-    match cards.as_slice() {
-        [c1, c2, c3, c4, c5] => Ok(Hand {
-            hand_type: hand_type_selector(s)?,
-            cards: [*c1, *c2, *c3, *c4, *c5],
-        }),
-        _ => Err(Fail(format!("expected 5 cards, got {}: {s}", s.len()))),
-    }
-}
-
-#[test]
-fn test_hand_try_from_str() {
-    use part1::Part1Card;
-    use Label::*;
-    fn card(value: Label) -> part1::Part1Card {
-        Part1Card { value: value }
-    }
-    fn parse(s: &str) -> Result<Hand<Part1Card>, Fail> {
-        parse_hand::<Part1Card>(s, part1::get_hand_type)
-    }
-    assert_eq!(
-        parse("AAAAA"),
-        Ok(Hand {
-            hand_type: HandType::FiveOfAKind,
-            cards: [card(Ace), card(Ace), card(Ace), card(Ace), card(Ace),]
-        })
-    );
-    assert!(parse("11111").is_err());
-    assert!(parse("qqqqq").is_err());
-}
-
-fn parse_line<C: Card>(
-    s: &str,
-    hand_type_selector: fn(&str) -> Result<HandType, Fail>,
-) -> Result<(Hand<C>, u32), Fail> {
-    match s.split_once(' ') {
-        Some((hand, bid)) => match (
-            parse_hand::<C>(hand, hand_type_selector)?,
-            bid.parse::<u32>(),
-        ) {
-            (hand, Ok(bid)) => Ok((hand, bid)),
-            (_, Err(e)) => Err(Fail(format!("{bid} is not a valid bid: {e}"))),
-        },
-        None => Err(Fail(format!("expected to find a space in {s}"))),
-    }
-}
-
-#[cfg(test)]
-fn get_example() -> &'static str {
-    concat!(
-        "32T3K 765\n",
-        "T55J5 684\n",
-        "KK677 28\n",
-        "KTJJT 220\n",
-        "QQQJA 483\n",
-    )
-}
-
-fn parse_input<C: Card>(
-    s: &str,
-    hand_type_selector: fn(&str) -> Result<HandType, Fail>,
-) -> Result<Vec<(Hand<C>, u32)>, Fail> {
-    s.split_terminator('\n')
-        .map(|line| parse_line(line, hand_type_selector))
-        .collect::<Result<Vec<(Hand<C>, u32)>, Fail>>()
-}
-
-#[test]
-fn test_parse_input_part1() {
-    run_test_parse_input_part::<part1::Part1Card>(part1::get_hand_type)
-}
-
-#[test]
-fn test_parse_input_part2() {
-    run_test_parse_input_part::<part2::Part2Card>(part2::get_hand_type)
-}
-
-#[cfg(test)]
-fn run_test_parse_input_part<C: Card>(hand_type_selector: fn(&str) -> Result<HandType, Fail>) {
-    use HandType::*;
-    use Label::*;
-    let input: Vec<(Hand<C>, u32)> =
-        parse_input(get_example(), hand_type_selector).expect("example should be valid");
-    assert_eq!(input.len(), 5);
-
-    fn card<C: Card>(value: Label) -> C {
-        C::from(value)
-    }
-
-    let expected_first_hand: Hand<C> = Hand::<C> {
-        hand_type: OnePair,
-        cards: [
-            card(Number('3')),
-            card(Number('2')),
-            card(Ten),
-            card(Number('3')),
-            card(King),
-        ],
-    };
-
-    assert_eq!((expected_first_hand, 765), input[0]);
-}
-
 /// Reads the puzzle input.
 fn get_input() -> String {
     let input = str::from_utf8(include_bytes!("input.txt")).unwrap();
@@ -553,6 +434,13 @@ fn get_input() -> String {
 }
 
 fn main() {
-    println!("day 07 part 1: {}", part1::solve(&get_input()));
-    println!("day 07 part 2: {}", part2::solve(&get_input()));
+    let input = parse_input(&get_input()).expect("puzzle input should be valid");
+    println!(
+        "day 07 part 1: {}",
+        solve(&input, part1_sort_key).expect("data should be valid for part 1")
+    );
+    println!(
+        "day 07 part 2: {}",
+        solve(&input, part2_sort_key).expect("data should be valid for part 2")
+    );
 }
