@@ -3,6 +3,7 @@ use std::collections::HashSet;
 use std::fmt::Display;
 use std::str;
 
+use num::integer::lcm;
 use regex::Regex;
 
 use lib::error::Fail;
@@ -38,6 +39,16 @@ struct Network {
 }
 
 impl Network {
+    fn start_nodes(&self) -> Vec<&Name> {
+        fn is_start_node(name: &Name) -> bool {
+            name.label.ends_with('A')
+        }
+        self.nodes
+            .keys()
+            .filter(|node| is_start_node(node))
+            .collect()
+    }
+
     fn step(&self, here: &Name, step: char) -> Result<&Name, Fail> {
         let go_left = match step {
             'L' => Ok(true),
@@ -58,7 +69,7 @@ impl Network {
 }
 
 fn parse_input(s: &str) -> Result<(String, Network), Fail> {
-    let line_re = Regex::new(r"^([A-Z]{3}) = \(([A-Z]{3}), ([A-Z]{3})\)$").unwrap();
+    let line_re = Regex::new(r"^([A-Z0-9]{3}) = \(([A-Z0-9]{3}), ([A-Z0-9]{3})\)$").unwrap();
     match s.split_once("\n\n") {
         Some((instructions, mappings)) => Ok((
             instructions.to_string(),
@@ -128,6 +139,24 @@ fn get_example_2() -> (String, Network) {
     parse_input(INPUT).expect("example 2 should be valid")
 }
 
+#[cfg(test)]
+fn get_example_3() -> (String, Network) {
+    // This is the example from part 2.
+    const INPUT: &str = concat!(
+        "LR\n",
+        "\n",
+        "11A = (11B, XXX)\n",
+        "11B = (XXX, 11Z)\n",
+        "11Z = (11B, XXX)\n",
+        "22A = (22B, XXX)\n",
+        "22B = (22C, 22C)\n",
+        "22C = (22Z, 22Z)\n",
+        "22Z = (22B, 22B)\n",
+        "XXX = (XXX, XXX)\n",
+    );
+    parse_input(INPUT).expect("example 3 should be valid")
+}
+
 #[test]
 fn test_parser() {
     let expected = [
@@ -160,15 +189,17 @@ fn test_stepping() {
     );
 }
 
-fn count_steps_to_target(
+fn count_steps_to_target_part1<F>(
     instructions: &str,
     network: &Network,
     start: &str,
-    target: &str,
-) -> usize {
+    is_target: F,
+) -> usize
+where
+    F: Fn(&Name) -> bool,
+{
     let mut seen: HashSet<(usize, Name)> = HashSet::new();
     let mut here = &Name::from(start);
-    let target = &Name::from(target);
     for (steps_taken, (cycle_pos, instruction)) in
         instructions.chars().enumerate().cycle().enumerate()
     {
@@ -178,29 +209,33 @@ fn count_steps_to_target(
         }
         seen.insert(marker);
         here = network.step(here, instruction).expect("remain in network");
-        if here == target {
+        if is_target(here) {
             return steps_taken + 1;
         }
     }
     unreachable!()
 }
 
-#[test]
-fn test_count_steps_to_target_example1() {
-    let (instructions, network) = get_example_1();
-    assert_eq!(
-        count_steps_to_target(&instructions, &network, "AAA", "ZZZ"),
-        2
-    );
-}
+fn count_steps_to_target_part2(instructions: &str, network: &Network) -> usize {
+    fn is_parallel_target(name: &Name) -> bool {
+        name.label.ends_with('Z')
+    }
 
-#[test]
-fn test_count_steps_to_target_example2() {
-    let (instructions, network) = get_example_2();
-    assert_eq!(
-        count_steps_to_target(&instructions, &network, "AAA", "ZZZ"),
-        6
-    );
+    fn lcm_of_all(items: &[usize]) -> Option<usize> {
+        match items {
+            [initial, rest @ ..] => Some(rest.iter().fold(*initial, |acc, n| lcm(acc, *n))),
+            [] => None,
+        }
+    }
+
+    let cycle_lengths: Vec<usize> = network
+        .start_nodes()
+        .iter()
+        .map(|start| {
+            count_steps_to_target_part1(instructions, network, &start.label, is_parallel_target)
+        })
+        .collect();
+    lcm_of_all(&cycle_lengths).expect("there must be at least one start node")
 }
 
 fn get_input() -> &'static str {
@@ -212,10 +247,34 @@ fn get_parsed_input() -> (String, Network) {
 }
 
 fn part1(instructions: &str, network: &Network) -> usize {
-    count_steps_to_target(instructions, network, "AAA", "ZZZ")
+    let done = |name: &Name| name.label == "ZZZ";
+    count_steps_to_target_part1(instructions, network, "AAA", done)
+}
+
+#[test]
+fn test_part1_example1() {
+    let (instructions, network) = get_example_1();
+    assert_eq!(part1(&instructions, &network), 2);
+}
+
+#[test]
+fn test_part1_example2() {
+    let (instructions, network) = get_example_2();
+    assert_eq!(part1(&instructions, &network), 6);
+}
+
+fn part2(instructions: &str, network: &Network) -> usize {
+    count_steps_to_target_part2(instructions, network)
+}
+
+#[test]
+fn test_part2_example3() {
+    let (instructions, network) = get_example_3();
+    assert_eq!(part2(&instructions, &network), 6);
 }
 
 fn main() {
     let (instructions, network) = get_parsed_input();
     println!("day 08 part 1: {}", part1(&instructions, &network));
+    println!("day 08 part 2: {}", part2(&instructions, &network));
 }
