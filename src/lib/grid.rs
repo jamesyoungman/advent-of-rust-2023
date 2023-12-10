@@ -1,4 +1,4 @@
-use std::fmt::{self, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum CompassDirection {
@@ -51,7 +51,7 @@ pub const ALL_MOVE_OPTIONS: [CompassDirection; 4] = [
     CompassDirection::West,
 ];
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Position {
     pub x: i64,
     pub y: i64,
@@ -60,6 +60,12 @@ pub struct Position {
 impl Display for Position {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{},{}", self.x, self.y)
+    }
+}
+
+impl Debug for Position {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "Position{{x:{},y:{}}}", self.x, self.y)
     }
 }
 
