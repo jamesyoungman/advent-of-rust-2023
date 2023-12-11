@@ -11,7 +11,7 @@ use lib::grid::{manhattan, BoundingBox, Position};
 #[derive(Debug)]
 struct Image {
     occupied_rows: BTreeMap<i64, BTreeSet<i64>>,
-    occupied_cols: BTreeMap<i64, BTreeSet<i64>>,
+    occupied_cols: BTreeSet<i64>,
     bounds: BoundingBox,
 }
 
@@ -42,16 +42,13 @@ impl Display for Image {
 
 impl Image {
     fn popcount(&self) -> usize {
-        let answer_row_wise: usize = self.occupied_rows.values().map(|row| row.len()).sum();
-        let answer_col_wise: usize = self.occupied_cols.values().map(|col| col.len()).sum();
-        assert_eq!(answer_col_wise, answer_row_wise);
-        answer_col_wise
+        self.occupied_rows.values().map(|row| row.len()).sum()
     }
 
     #[cfg(test)]
     fn unoccupied_cols(&self) -> Vec<i64> {
         ((self.bounds.top_left.x)..=(self.bounds.bottom_right.x))
-            .filter(|x| !self.occupied_cols.contains_key(&x))
+            .filter(|col| !self.occupied_cols.contains(&col))
             .collect()
     }
 
@@ -66,7 +63,7 @@ impl Image {
 fn parse_input(s: &str) -> Result<Image, Fail> {
     let mut bbox: Option<BoundingBox> = None;
     let mut occupied_rows: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
-    let mut occupied_cols: BTreeMap<i64, BTreeSet<i64>> = BTreeMap::new();
+    let mut occupied_cols: BTreeSet<i64> = BTreeSet::new();
     for (y, line) in s.split_terminator('\n').enumerate() {
         for (x, ch) in line.chars().enumerate() {
             let pos = Position {
@@ -90,12 +87,7 @@ fn parse_input(s: &str) -> Result<Image, Fail> {
                 result
             }
             if ch == '#' {
-                occupied_cols
-                    .entry(pos.x)
-                    .and_modify(|col| {
-                        col.insert(pos.y);
-                    })
-                    .or_insert_with(|| just(pos.y));
+                occupied_cols.insert(pos.x);
                 occupied_rows
                     .entry(pos.y)
                     .and_modify(|row| {
@@ -189,7 +181,7 @@ fn expand<'a>(img: &'a Image, expandby: i64) -> ExpandedImage<'a> {
         for orig_x in (img.bounds.top_left.x)..=(img.bounds.bottom_right.x) {
             let expanded_x = empty_col_count + orig_x;
             max_x = max(max_x, expanded_x);
-            if img.occupied_cols.contains_key(&orig_x) {
+            if img.occupied_cols.contains(&orig_x) {
                 x_map.insert(expanded_x, orig_x);
             } else {
                 empty_col_count += extra_rows_or_columns;
