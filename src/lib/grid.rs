@@ -1,3 +1,4 @@
+use std::cmp::{max, min};
 use std::fmt::{self, Debug, Display, Formatter};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -152,6 +153,19 @@ pub fn update_max(max: &mut i64, val: i64) {
 pub struct BoundingBox {
     pub top_left: Position,
     pub bottom_right: Position,
+}
+
+impl BoundingBox {
+    pub fn update(&mut self, pos: &Position) {
+        self.top_left = Position {
+            x: min(self.top_left.x, pos.x),
+            y: min(self.top_left.y, pos.y),
+        };
+        self.bottom_right = Position {
+            x: max(self.bottom_right.x, pos.x),
+            y: max(self.bottom_right.y, pos.y),
+        };
+    }
 }
 
 pub fn bounds<'a, I>(points: I) -> Option<BoundingBox>
