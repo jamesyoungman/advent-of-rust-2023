@@ -180,7 +180,8 @@ struct ExpandedImage<'a> {
     bounds: BoundingBox,
 }
 
-fn expand<'a>(img: &'a Image) -> ExpandedImage<'a> {
+fn expand<'a>(img: &'a Image, expandby: i64) -> ExpandedImage<'a> {
+    let extra_rows_or_columns = expandby - 1;
     let (x_map, max_x) = {
         let mut empty_col_count: i64 = 0;
         let mut x_map: BiMap<i64, i64> = Default::default();
@@ -191,7 +192,7 @@ fn expand<'a>(img: &'a Image) -> ExpandedImage<'a> {
             if img.occupied_cols.contains_key(&orig_x) {
                 x_map.insert(expanded_x, orig_x);
             } else {
-                empty_col_count += 1;
+                empty_col_count += extra_rows_or_columns;
             }
         }
         (x_map, max_x)
@@ -208,7 +209,7 @@ fn expand<'a>(img: &'a Image) -> ExpandedImage<'a> {
             if img.occupied_rows.contains_key(&orig_y) {
                 y_map.insert(expanded_y, orig_y);
             } else {
-                empty_row_count += 1;
+                empty_row_count += extra_rows_or_columns;
             }
         }
         (y_map, max_y)
@@ -313,7 +314,7 @@ impl<'a> ExpandedImage<'a> {
 #[test]
 fn test_expand() {
     let img = get_example_image();
-    let expanded = expand(&img);
+    let expanded = expand(&img, 2);
     let expected = concat!(
         "....#........\n",
         ".........#...\n",
@@ -334,13 +335,16 @@ fn test_expand() {
     assert_eq!(expanded.to_string(), expected);
 }
 
-fn part1(img: &Image) -> i64 {
-    let expanded = expand(img);
+fn sum_distances(expanded: &ExpandedImage<'_>) -> i64 {
     expanded
         .galaxy_pairs()
         .iter()
         .map(|(first, second)| manhattan(first, second))
         .sum()
+}
+
+fn part1(img: &Image) -> i64 {
+    sum_distances(&expand(img, 2))
 }
 
 #[test]
@@ -349,8 +353,20 @@ fn test_part1() {
     assert_eq!(part1(&img), 374);
 }
 
+fn part2(img: &Image) -> i64 {
+    sum_distances(&expand(img, 1_000_000))
+}
+
+#[test]
+fn test_expand_10_100() {
+    let img = get_example_image();
+    assert_eq!(sum_distances(&expand(&img, 10)), 1030);
+    assert_eq!(sum_distances(&expand(&img, 100)), 8410);
+}
+
 fn main() {
     let input = str::from_utf8(include_bytes!("input.txt")).unwrap();
     let img = parse_input(input).expect("input should be valid");
     println!("day 11 part 1: {}", part1(&img));
+    println!("day 11 part 2: {}", part2(&img));
 }
