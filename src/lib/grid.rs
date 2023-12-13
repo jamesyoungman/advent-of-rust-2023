@@ -163,6 +163,12 @@ impl BoundingBox {
         }
     }
 
+    pub fn area(&self) -> i64 {
+        let width = 1 + self.bottom_right.x - self.top_left.x;
+        let height = 1 + self.bottom_right.y - self.top_left.y;
+        width * height
+    }
+
     pub fn update(&mut self, pos: &Position) {
         self.top_left = Position {
             x: min(self.top_left.x, pos.x),
