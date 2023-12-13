@@ -156,6 +156,13 @@ pub struct BoundingBox {
 }
 
 impl BoundingBox {
+    pub fn new(pos: &Position) -> BoundingBox {
+        BoundingBox {
+            top_left: pos.clone(),
+            bottom_right: pos.clone(),
+        }
+    }
+
     pub fn update(&mut self, pos: &Position) {
         self.top_left = Position {
             x: min(self.top_left.x, pos.x),
@@ -166,6 +173,70 @@ impl BoundingBox {
             y: max(self.bottom_right.y, pos.y),
         };
     }
+
+    pub fn contains(&self, pos: &Position) -> bool {
+        self.top_left.x <= pos.x
+            && self.top_left.y <= pos.y
+            && self.bottom_right.x >= pos.x
+            && self.bottom_right.y >= pos.y
+    }
+}
+
+#[test]
+fn test_bbox_contains() {
+    let b = BoundingBox {
+        top_left: Position { x: 1, y: 0 },
+        bottom_right: Position { x: 5, y: 2 },
+    };
+    assert!(b.contains(&Position { x: 1, y: 1 }));
+    assert!(!b.contains(&Position { x: 0, y: 1 })); // x too low
+    assert!(!b.contains(&Position { x: 6, y: 1 })); // x too high
+    assert!(!b.contains(&Position { x: 1, y: -1 })); // y too low
+    assert!(!b.contains(&Position { x: 1, y: 3 })); // y too high
+}
+
+#[test]
+fn test_bbox_update() {
+    let mut b = BoundingBox {
+        top_left: Position { x: 5, y: 5 },
+        bottom_right: Position { x: 5, y: 5 },
+    };
+
+    b.update(&Position { x: 6, y: 5 });
+    assert_eq!(
+        b,
+        BoundingBox {
+            top_left: Position { x: 5, y: 5 },
+            bottom_right: Position { x: 6, y: 5 },
+        }
+    );
+
+    b.update(&Position { x: 5, y: 6 });
+    assert_eq!(
+        b,
+        BoundingBox {
+            top_left: Position { x: 5, y: 5 },
+            bottom_right: Position { x: 6, y: 6 },
+        }
+    );
+
+    b.update(&Position { x: 4, y: 5 });
+    assert_eq!(
+        b,
+        BoundingBox {
+            top_left: Position { x: 4, y: 5 },
+            bottom_right: Position { x: 6, y: 6 }
+        }
+    );
+
+    b.update(&Position { x: 5, y: 4 });
+    assert_eq!(
+        b,
+        BoundingBox {
+            top_left: Position { x: 4, y: 4 },
+            bottom_right: Position { x: 6, y: 6 },
+        },
+    );
 }
 
 pub fn bounds<'a, I>(points: I) -> Option<BoundingBox>
