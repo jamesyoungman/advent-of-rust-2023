@@ -218,7 +218,7 @@ impl Platform {
             .flat_map(|(_, pos)| pos.iter())
         {
             let newpos =
-                compute_final_position(pos.clone(), &direction, &new_positions, &self.bbox);
+                compute_final_position(*pos, &direction, &new_positions, &self.bbox);
             new_positions.insert(newpos, Rock::Round);
         }
 

@@ -123,12 +123,9 @@ impl Grid {
             Some(Pipe::PipeL) | Some(Pipe::PipeF) | Some(Pipe::PipeH) => true,
             _ => false,
         };
-        let insufficient = || {
-            Fail(format!(
-                "cannot determine start pipe type: insufficient exits"
-            ))
-        };
-        let toomany = || Fail(format!("cannot determine start pipe type: too many exits"));
+        let insufficient =
+            || Fail("cannot determine start pipe type: insufficient exits".to_string());
+        let toomany = || Fail("cannot determine start pipe type: too many exits".to_string());
         const F: bool = false;
         const T: bool = true;
         let pipe: Pipe = match (north, east, south, west) {
@@ -149,7 +146,7 @@ impl Grid {
             (T, T, T, F) => Err(toomany()),
             (T, T, T, T) => Err(toomany()),
         }?;
-        self.cells.insert(self.start.clone(), pipe);
+        self.cells.insert(self.start, pipe);
         Ok(())
     }
 }
@@ -214,7 +211,7 @@ fn parse_input(s: &str) -> Result<Grid, Fail> {
         grid.identify_start_pos_pipe()?;
         Ok(grid)
     } else {
-        Err(Fail(format!("no known start position")))
+        Err(Fail("no known start position".to_string()))
     }
 }
 
@@ -230,15 +227,15 @@ fn test_parse_input() {
 }
 
 fn measure_distances(grid: &Grid) -> HashMap<Position, usize> {
-    let mut frontier: VecDeque<(Position, usize)> = VecDeque::from([(grid.start.clone(), 0)]);
+    let mut frontier: VecDeque<(Position, usize)> = VecDeque::from([(grid.start, 0)]);
     let mut result: HashMap<Position, usize> = HashMap::new();
-    result.insert(grid.start.clone(), 0);
+    result.insert(grid.start, 0);
     while let Some((pos, steps)) = frontier.pop_front() {
         for n in grid.neighbours(&pos) {
-            if !result.contains_key(&n) {
-                frontier.push_back((n.clone(), steps + 1));
-                result.insert(n, steps + 1);
-            }
+            result.entry(n).or_insert_with(|| {
+                frontier.push_back((n, steps + 1));
+                steps + 1
+            });
         }
     }
     result
@@ -249,8 +246,8 @@ fn show_distances(distances: &HashMap<Position, usize>) {
     for (pos, steps) in distances.iter() {
         inverted
             .entry(*steps)
-            .and_modify(|v| v.push(pos.clone()))
-            .or_insert_with(|| vec![pos.clone()]);
+            .and_modify(|v| v.push(*pos))
+            .or_insert_with(|| vec![*pos]);
     }
     //dbg!(inverted);
 }

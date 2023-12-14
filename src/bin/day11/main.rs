@@ -73,8 +73,8 @@ fn parse_input(s: &str) -> Result<Image, Fail> {
             match bbox.as_mut() {
                 None => {
                     bbox = Some(BoundingBox {
-                        top_left: pos.clone(),
-                        bottom_right: pos.clone(),
+                        top_left: pos,
+                        bottom_right: pos,
                     });
                 }
                 Some(b) => {
@@ -172,7 +172,7 @@ struct ExpandedImage<'a> {
     bounds: BoundingBox,
 }
 
-fn expand<'a>(img: &'a Image, expandby: i64) -> ExpandedImage<'a> {
+fn expand(img: &Image, expandby: i64) -> ExpandedImage<'_> {
     let extra_rows_or_columns = expandby - 1;
     let (x_map, max_x) = {
         let mut empty_col_count: i64 = 0;
@@ -234,14 +234,13 @@ impl<'a> Display for ExpandedImage<'a> {
             match self
                 .y_map
                 .get_by_left(&y)
-                .map(|orig_y| self.original.occupied_rows.get(&orig_y))
-                .flatten()
+                .and_then(|orig_y| self.original.occupied_rows.get(orig_y))
             {
                 Some(row) => {
                     for x in (self.bounds.top_left.x)..=(self.bounds.bottom_right.x) {
                         match self.x_map.get_by_left(&x) {
                             Some(orig_x) => {
-                                if row.contains(&orig_x) {
+                                if row.contains(orig_x) {
                                     f.write_char('#')?;
                                 } else {
                                     f.write_char('.')?;
@@ -287,7 +286,7 @@ impl<'a> ExpandedImage<'a> {
     }
 
     fn galaxy_pairs(&self) -> Vec<(Position, Position)> {
-        let mut result = Vec::new();
+        let mut result: Vec<(Position, Position)> = Vec::new();
         let v = self.galaxies();
         fn galaxy_cmp(left: &Position, right: &Position) -> Ordering {
             left.x.cmp(&right.x).then_with(|| left.y.cmp(&right.y))
@@ -295,7 +294,7 @@ impl<'a> ExpandedImage<'a> {
         for first in v.iter() {
             for second in v.iter() {
                 if galaxy_cmp(first, second) == Ordering::Less {
-                    result.push((first.clone(), second.clone()));
+                    result.push((*first, *second));
                 }
             }
         }

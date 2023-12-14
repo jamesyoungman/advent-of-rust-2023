@@ -183,14 +183,14 @@ impl Pattern {
 
     fn horizontal_symmetries(&self) -> Vec<Symmetry> {
         self.columns()
-            .map(|x| Symmetry::Horizontal(x))
-            .filter(|axis| self.has_horizontal_symmetry(&axis))
+            .map(Symmetry::Horizontal)
+            .filter(|axis| self.has_horizontal_symmetry(axis))
             .collect()
     }
 
     fn vertical_symmetries(&self) -> Vec<Symmetry> {
         self.rows()
-            .map(|y| Symmetry::Vertical(y))
+            .map(Symmetry::Vertical)
             .filter(|axis| self.has_vertical_symmetry(axis))
             .collect()
     }
@@ -278,14 +278,14 @@ impl Pattern {
         (!self.reflection_area_would_be_empty(axis))
             && self
                 .rows()
-                .all(|y| dbg!(self.is_row_symmetrical_about_axis(&axis, dbg!(y))))
+                .all(|y| dbg!(self.is_row_symmetrical_about_axis(axis, dbg!(y))))
     }
 
     fn has_vertical_symmetry(&self, axis: &Symmetry) -> bool {
         (!self.reflection_area_would_be_empty(axis))
             && self
                 .columns()
-                .all(|x| self.is_column_symmetrical_about_axis(x, &axis))
+                .all(|x| self.is_column_symmetrical_about_axis(x, axis))
     }
 }
 
