@@ -105,18 +105,21 @@ impl Symmetry {
         }
     }
 
+    #[cfg(test)]
     fn reflection_point(&self) -> i64 {
         match self {
             Symmetry::Horizontal(n) | Symmetry::Vertical(n) => *n,
         }
     }
 
+    #[cfg(test)]
     fn reflection_point_as_string(&self) -> String {
         let pos = self.reflection_point() as usize;
         format!("{:pos$}><", "")
     }
 }
 
+#[cfg(test)]
 fn show_line_of_reflection(pat: &Pattern, line: &Symmetry, show_at: i64) -> String {
     let terrain = match line {
         Symmetry::Horizontal(_) => pat.row_string(show_at),
@@ -133,12 +136,14 @@ impl Pattern {
         }
     }
 
+    #[cfg(test)]
     fn row_string(&self, y: i64) -> String {
         self.columns()
             .map(|x| self.get_marker(&Position { x, y }).unwrap_or('?'))
             .collect()
     }
 
+    #[cfg(test)]
     fn column_string(&self, x: i64) -> String {
         self.rows()
             .map(|y| self.get_marker(&Position { x, y }).unwrap_or('?'))
@@ -228,6 +233,7 @@ impl Pattern {
     fn is_column_symmetrical_about_axis(&self, x: i64, axis: &Symmetry) -> bool {
         // axis is the possible vertical reflection axis, x identifies
         // the column to check.
+        #[cfg(test)]
         println!(
             "checking for reflection axis at {axis:?} over column {x}: {}",
             self.column_string(x)
