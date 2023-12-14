@@ -95,34 +95,34 @@ impl Grid {
 
     fn identify_start_pos_pipe(&mut self) -> Result<(), Fail> {
         // Decide if the start pipe has an exit in each of the cardinal directions.
-        let north = match self.cells.get(&Position {
-            x: self.start.x,
-            y: self.start.y - 1,
-        }) {
-            Some(Pipe::Pipe7) | Some(Pipe::PipeF) | Some(Pipe::PipeV) => true,
-            _ => false,
-        };
-        let east = match self.cells.get(&Position {
-            x: self.start.x + 1,
-            y: self.start.y,
-        }) {
-            Some(Pipe::PipeJ) | Some(Pipe::Pipe7) | Some(Pipe::PipeH) => true,
-            _ => false,
-        };
-        let south = match self.cells.get(&Position {
-            x: self.start.x,
-            y: self.start.y + 1,
-        }) {
-            Some(Pipe::PipeJ) | Some(Pipe::PipeL) | Some(Pipe::PipeV) => true,
-            _ => false,
-        };
-        let west = match self.cells.get(&Position {
-            x: self.start.x - 1,
-            y: self.start.y,
-        }) {
-            Some(Pipe::PipeL) | Some(Pipe::PipeF) | Some(Pipe::PipeH) => true,
-            _ => false,
-        };
+        let north = matches!(
+            self.cells.get(&Position {
+                x: self.start.x,
+                y: self.start.y - 1,
+            }),
+            Some(Pipe::Pipe7) | Some(Pipe::PipeF) | Some(Pipe::PipeV)
+        );
+        let east = matches!(
+            self.cells.get(&Position {
+                x: self.start.x + 1,
+                y: self.start.y,
+            }),
+            Some(Pipe::PipeJ) | Some(Pipe::Pipe7) | Some(Pipe::PipeH)
+        );
+        let south = matches!(
+            self.cells.get(&Position {
+                x: self.start.x,
+                y: self.start.y + 1,
+            }),
+            Some(Pipe::PipeJ) | Some(Pipe::PipeL) | Some(Pipe::PipeV)
+        );
+        let west = matches!(
+            self.cells.get(&Position {
+                x: self.start.x - 1,
+                y: self.start.y,
+            }),
+            Some(Pipe::PipeL) | Some(Pipe::PipeF) | Some(Pipe::PipeH)
+        );
         let insufficient =
             || Fail("cannot determine start pipe type: insufficient exits".to_string());
         let toomany = || Fail("cannot determine start pipe type: too many exits".to_string());
