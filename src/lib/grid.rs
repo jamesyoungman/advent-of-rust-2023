@@ -158,8 +158,8 @@ pub struct BoundingBox {
 impl BoundingBox {
     pub fn new(pos: &Position) -> BoundingBox {
         BoundingBox {
-            top_left: pos.clone(),
-            bottom_right: pos.clone(),
+            top_left: *pos,
+            bottom_right: *pos,
         }
     }
 
