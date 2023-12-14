@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::collections::HashMap;
 use std::fmt::{Display, Write};
 use std::str;
 
@@ -152,6 +153,11 @@ fn compute_final_position(
 }
 
 impl Platform {
+    fn fingerprint(&self) -> String {
+        // We could make this a lot faster I'm sure.
+        self.to_string()
+    }
+
     fn popcount(&self, rock: &Rock) -> usize {
         self.rocks.values().filter(|r| *r == rock).count()
     }
@@ -308,12 +314,49 @@ fn part1(platform: &Platform) -> i64 {
 #[test]
 fn test_part1() {
     let platform = get_parsed_example();
-    assert_eq!(
-        platform
-            .tilt(CompassDirection::North)
-            .loading(CompassDirection::North),
-        136
-    );
+    assert_eq!(part1(&platform), 136);
+}
+
+fn part2(orig_platform: &Platform) -> i64 {
+    use CompassDirection::*;
+    const MAX_CYCLES: usize = 1000000000;
+
+    fn cycle(platform_in: Platform) -> Platform {
+        platform_in.tilt(North).tilt(West).tilt(South).tilt(East)
+    }
+
+    fn find_cycle_length(mut platform_in: Platform) -> Result<(Platform, usize), Platform> {
+        let mut states: HashMap<_, usize> = HashMap::new();
+        for cycle_number in 1..=MAX_CYCLES {
+            let platform_out = cycle(platform_in);
+            let fingerprint = platform_out.fingerprint();
+            if let Some(previous) = states.insert(fingerprint, cycle_number) {
+                let remaining = MAX_CYCLES - previous;
+                let cycle_length = cycle_number - previous;
+                let cycles_to_do = remaining % cycle_length;
+                return Ok((platform_out, cycles_to_do));
+            }
+            platform_in = platform_out;
+        }
+        Err(platform_in)
+    }
+
+    let final_platform = match find_cycle_length(orig_platform.clone()) {
+        Ok((mut platform, cycles_still_to_do)) => {
+            for _ in 0..cycles_still_to_do {
+                platform = cycle(platform);
+            }
+            platform
+        }
+        Err(platform) => platform, // there was no cycle
+    };
+    final_platform.loading(CompassDirection::North)
+}
+
+#[test]
+fn test_part2() {
+    let platform = get_parsed_example();
+    assert_eq!(part2(&platform), 64);
 }
 
 fn get_input() -> &'static str {
@@ -323,4 +366,5 @@ fn get_input() -> &'static str {
 fn main() {
     let input = parse_input(get_input()).expect("puzzle input should be valid");
     println!("day 14 part 1: {}", part1(&input));
+    println!("day 14 part 2: {}", part2(&input));
 }
