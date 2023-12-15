@@ -1,54 +1,16 @@
 use std::fmt::{Display, Formatter, Write};
 use std::str;
 
+use lib::days::day15;
 use lib::error::Fail;
 
-#[derive(Debug, Clone, Default)]
-struct ReindeerHasher {
-    acc: u8,
-}
-
-impl ReindeerHasher {
-    fn add(&mut self, ch: char) {
-        match u8::try_from(ch) {
-            Ok(codepoint) => {
-                let sum: u16 = u16::from(self.acc) + u16::from(codepoint);
-                let product = sum * 17;
-                self.acc = u8::try_from(product % 256_u16)
-                    .expect("there should be no way for this quantity to get out of range");
-            }
-            Err(_) => {
-                panic!("non-ASCII character in input: {ch}");
-            }
-        }
-    }
-
-    fn get(&self) -> u8 {
-        self.acc
-    }
-
-    fn hash(s: &str) -> u8 {
-        s.chars()
-            .fold(ReindeerHasher::default(), |mut h, ch| {
-                h.add(ch);
-                h
-            })
-            .get()
-    }
-}
-
-#[test]
-fn test_hash() {
-    assert_eq!(ReindeerHasher::hash("HASH"), 52);
-    assert_eq!(ReindeerHasher::hash("rn=1"), 30);
-    assert_eq!(ReindeerHasher::hash("cm-"), 253);
-    assert_eq!(ReindeerHasher::hash("qp=3"), 97);
+#[inline]
+fn hash(s: &str) -> u8 {
+    day15::hash_generic::<u32>(s)
 }
 
 fn part1(s: &str) -> u64 {
-    s.split(',')
-        .map(|s| u64::from(ReindeerHasher::hash(s)))
-        .sum()
+    s.split(',').map(|s| u64::from(hash(s))).sum()
 }
 
 #[test]
@@ -100,7 +62,7 @@ impl Instruction {
     }
 
     fn target(&self) -> usize {
-        usize::from(ReindeerHasher::hash(self.label()))
+        usize::from(hash(self.label()))
     }
 }
 

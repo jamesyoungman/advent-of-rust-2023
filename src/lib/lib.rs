@@ -1,3 +1,4 @@
+pub mod days;
 pub mod error;
 pub mod grid;
 pub mod input;
