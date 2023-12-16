@@ -142,26 +142,18 @@ impl Beam {
     }
 }
 
-fn trace_beams(initial: Beam, grid: &Grid) -> HashMap<Position, usize> {
-    let mut beam_counts = HashMap::new();
+fn trace_beams(initial: Beam, grid: &Grid) -> HashSet<Position> {
+    let mut energised = HashSet::new();
     let mut cycle_detector: HashSet<Beam> = HashSet::new();
     let mut todo = vec![initial];
     while let Some(mut beam) = todo.pop() {
-        //eprintln!(
-        //    "tracing a new beam {beam:?}: there are {} left to do after this one",
-        //    todo.len()
-        //);
         while let Some(tile) = grid.cells.get(&beam.pos) {
             //eprintln!("beam is now at {}", &beam.pos);
             if !cycle_detector.insert(beam.clone()) {
                 // We have a cycle
                 break;
             }
-            let oldpos = beam.pos;
-            beam_counts
-                .entry(beam.pos)
-                .and_modify(|n| *n += 1)
-                .or_insert(1);
+            energised.insert(beam.pos);
             beam = match beam.next(tile) {
                 (b, None) => b,
                 (b, Some(split_beam)) => {
@@ -171,45 +163,25 @@ fn trace_beams(initial: Beam, grid: &Grid) -> HashMap<Position, usize> {
                     b
                 }
             };
-            assert!(beam.pos != oldpos);
         }
         // The current beam has now left the grid, so we are done with
         // it.
     }
-    beam_counts
+    energised
 }
 
 fn count_energised_squares(initial: Beam, grid: &Grid) -> usize {
     trace_beams(initial, grid).len()
 }
 
-fn beam_counts_to_string(counts: &HashMap<Position, usize>, bbox: &BoundingBox) -> String {
-    let mut result = String::with_capacity((bbox.area() + bbox.height()) as usize);
-    for y in bbox.top_left.y..=bbox.bottom_right.y {
-        for x in bbox.top_left.x..=bbox.bottom_right.x {
-            let here = Position { x, y };
-            if counts.contains_key(&here) {
-                result.push('#');
-            } else {
-                result.push('.');
-            }
-        }
-        result.push('\n');
-    }
-    result
-}
-
 fn part1(grid: &Grid) -> usize {
-    let initial = Beam {
-        direction: CompassDirection::East,
-        pos: grid.bbox.top_left,
-    };
-    let beam_counts = trace_beams(initial, grid);
-    eprintln!(
-        "part 1: energised squares:\n{}",
-        beam_counts_to_string(&beam_counts, &grid.bbox)
-    );
-    beam_counts.len()
+    count_energised_squares(
+        Beam {
+            direction: CompassDirection::East,
+            pos: grid.bbox.top_left,
+        },
+        grid,
+    )
 }
 
 #[cfg(test)]
