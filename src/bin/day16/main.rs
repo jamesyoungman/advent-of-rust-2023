@@ -1,4 +1,3 @@
-use itertools::Itertools;
 use lib::error::Fail;
 use std::collections::{HashMap, HashSet};
 use std::str;
@@ -12,19 +11,6 @@ enum Tile {
     PipeSplitter,    // |
     BackslashMirror, // \
     SlashMirror,     // /
-}
-
-impl Tile {
-    fn as_char(&self) -> char {
-        use Tile::*;
-        match self {
-            Empty => '.',
-            DashSplitter => '-',
-            PipeSplitter => '|',
-            BackslashMirror => '\\',
-            SlashMirror => '/',
-        }
-    }
 }
 
 impl TryFrom<char> for Tile {
@@ -48,6 +34,41 @@ struct Grid {
     bbox: BoundingBox,
 }
 
+impl Grid {
+    fn possible_start_points(&self) -> impl Iterator<Item = Beam> + '_ {
+        use CompassDirection::*;
+        let top = (self.bbox.top_left.x..self.bbox.bottom_right.x).map(|x| Beam {
+            pos: Position {
+                x,
+                y: self.bbox.top_left.y,
+            },
+            direction: South,
+        });
+        let bottom = (self.bbox.top_left.x..self.bbox.bottom_right.x).map(|x| Beam {
+            pos: Position {
+                x,
+                y: self.bbox.bottom_right.y,
+            },
+            direction: North,
+        });
+        let left = (self.bbox.top_left.y..self.bbox.bottom_right.y).map(|y| Beam {
+            pos: Position {
+                x: self.bbox.top_left.x,
+                y,
+            },
+            direction: East,
+        });
+        let right = (self.bbox.top_left.y..self.bbox.bottom_right.y).map(|y| Beam {
+            pos: Position {
+                x: self.bbox.bottom_right.x,
+                y,
+            },
+            direction: West,
+        });
+        left.chain(right).chain(top).chain(bottom)
+    }
+}
+
 fn parse_grid(s: &str) -> Result<Grid, Fail> {
     let mut here = Position { x: 0, y: 0 };
     let mut cells = HashMap::new();
@@ -61,7 +82,7 @@ fn parse_grid(s: &str) -> Result<Grid, Fail> {
             here.x = 0;
             here.y += 1;
         } else {
-            cells.insert(here.clone(), Tile::try_from(ch)?);
+            cells.insert(here, Tile::try_from(ch)?);
             bbox.update(&here);
             here.x += 1;
         }
@@ -158,6 +179,10 @@ fn trace_beams(initial: Beam, grid: &Grid) -> HashMap<Position, usize> {
     beam_counts
 }
 
+fn count_energised_squares(initial: Beam, grid: &Grid) -> usize {
+    trace_beams(initial, grid).len()
+}
+
 fn beam_counts_to_string(counts: &HashMap<Position, usize>, bbox: &BoundingBox) -> String {
     let mut result = String::with_capacity((bbox.area() + bbox.height()) as usize);
     for y in bbox.top_left.y..=bbox.bottom_right.y {
@@ -187,21 +212,9 @@ fn part1(grid: &Grid) -> usize {
     beam_counts.len()
 }
 
-#[test]
-fn test_part1() {
-    //let example = concat!(
-    //    "######....\n",
-    //    ".#...#....\n",
-    //    ".#...#####\n",
-    //    ".#...##...\n",
-    //    ".#...##...\n",
-    //    ".#...##...\n",
-    //    ".#..####..\n",
-    //    "########..\n",
-    //    ".#######..\n",
-    //    ".#...#.#..\n",
-    //);
-    let example = concat!(
+#[cfg(test)]
+fn get_example() -> &'static str {
+    concat!(
         r".|...\....",
         "\n",
         r"|.-.\.....",
@@ -222,9 +235,26 @@ fn test_part1() {
         "\n",
         r"..//.|....",
         "\n",
-    );
-    let grid = parse_grid(example).expect("example should be valid");
+    )
+}
+
+#[test]
+fn test_part1() {
+    let grid = parse_grid(get_example()).expect("example should be valid");
     assert_eq!(part1(&grid), 46);
+}
+
+fn part2(grid: &Grid) -> usize {
+    grid.possible_start_points()
+        .map(|start| count_energised_squares(start, grid))
+        .max()
+        .unwrap_or(0)
+}
+
+#[test]
+fn test_part2() {
+    let grid = parse_grid(get_example()).expect("example should be valid");
+    assert_eq!(part2(&grid), 51);
 }
 
 fn get_input() -> &'static str {
@@ -234,4 +264,5 @@ fn get_input() -> &'static str {
 fn main() {
     let grid = parse_grid(get_input()).expect("input should be valid");
     println!("day 16 part 1: {}", part1(&grid));
+    println!("day 16 part 2: {}", part2(&grid));
 }
