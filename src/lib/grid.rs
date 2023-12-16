@@ -1,5 +1,5 @@
 use std::cmp::{max, min};
-use std::fmt::{self, Debug, Display, Formatter};
+use std::fmt::{self, Debug, Display, Formatter, Write};
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum CompassDirection {
@@ -23,13 +23,7 @@ impl CompassDirection {
 
 impl Display for CompassDirection {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        use CompassDirection::*;
-        f.write_str(match self {
-            North => "S",
-            South => "N",
-            East => "W",
-            West => "E",
-        })
+        f.write_char(char::from(*self))
     }
 }
 
