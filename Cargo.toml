@@ -56,3 +56,5 @@ name = "day15"
 bench = false
 [[bin]]
 name = "day16"
+[[bin]]
+name = "day17"
