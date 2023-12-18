@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 use std::fmt::{Display, Formatter, Write};
-//use std::str;
+use std::str;
 
-use lib::grid::{BoundingBox, CompassDirection, Position};
+use lib::grid::{BoundingBox, CompassDirection, Position, ALL_MOVE_OPTIONS};
 
 use lib::error::Fail;
 
@@ -49,6 +49,7 @@ fn parse_input(s: &str) -> Result<Vec<Instruction>, Fail> {
         .collect::<Result<Vec<Instruction>, Fail>>()
 }
 
+#[cfg(test)]
 fn get_example() -> &'static str {
     concat!(
         "R 6 (#70c710)\n",
@@ -81,6 +82,31 @@ fn test_parse_example() {
     );
 }
 
+fn flood(
+    start: &Position,
+    bbox: &BoundingBox,
+    cells: &mut BTreeSet<Position>,
+    forbidden: &BTreeSet<Position>,
+) {
+    let mut iteration_count = 0;
+    let iteration_limit = bbox.area() * 4;
+    let mut frontier = Vec::new();
+    frontier.push(*start);
+    while let Some(pos) = frontier.pop() {
+        iteration_count += 1;
+        if iteration_count > iteration_limit {
+            panic!("infinite loop in flood");
+        }
+        cells.insert(pos);
+        for direction in ALL_MOVE_OPTIONS.iter() {
+            let n = pos.move_direction(direction);
+            if bbox.contains(&n) && !cells.contains(&n) && !forbidden.contains(&n) {
+                frontier.push(n);
+            }
+        }
+    }
+}
+
 #[derive(Debug, Hash, Eq, PartialEq)]
 struct Grid {
     pos: Position,
@@ -99,6 +125,10 @@ impl Grid {
         }
     }
 
+    fn capacity(&self) -> i64 {
+        self.cubes.len() as i64
+    }
+
     fn dig_at(&mut self, pos: Position) {
         self.bbox.update(&pos);
         self.cubes.insert(pos);
@@ -109,6 +139,35 @@ impl Grid {
         for _ in 0..dist {
             self.dig_at(self.pos.move_direction(&direction))
         }
+    }
+
+    fn find_interior(&self) -> BTreeSet<Position> {
+        let enlarged_bbox = BoundingBox {
+            top_left: Position {
+                x: self.bbox.top_left.x - 1,
+                y: self.bbox.top_left.y - 1,
+            },
+            bottom_right: Position {
+                x: self.bbox.bottom_right.x + 1,
+                y: self.bbox.bottom_right.y + 1,
+            },
+        };
+        let mut exterior = BTreeSet::new();
+        flood(
+            &enlarged_bbox.top_left,
+            &enlarged_bbox,
+            &mut exterior,
+            &self.cubes,
+        );
+        self.bbox
+            .surface()
+            .filter(|pos| !exterior.contains(pos))
+            .collect()
+    }
+
+    fn excavate_interior(&mut self) {
+        // changes to the interior will not affect the bounding box.
+        self.cubes.extend(self.find_interior());
     }
 }
 
@@ -125,7 +184,7 @@ impl Display for Grid {
     }
 }
 
-fn execute_dig_plan(plan: &[Instruction]) -> Grid {
+fn dig_trenches(plan: &[Instruction]) -> Grid {
     let mut grid: Grid = Grid::new(Position { x: 0, y: 0 });
     for instruction in plan.iter() {
         grid.dig(instruction.direction, instruction.distance);
@@ -136,7 +195,7 @@ fn execute_dig_plan(plan: &[Instruction]) -> Grid {
 #[test]
 fn test_example_part1_dig() {
     let plan = parse_input(get_example()).expect("example should be valid");
-    let grid = execute_dig_plan(&plan);
+    let grid = dig_trenches(&plan);
     assert_eq!(
         grid.to_string(),
         concat!(
@@ -154,4 +213,42 @@ fn test_example_part1_dig() {
     );
 }
 
-fn main() {}
+#[test]
+fn test_example_part1_excavate_interior() {
+    let plan = parse_input(get_example()).expect("example should be valid");
+    let mut grid = dig_trenches(&plan);
+    grid.excavate_interior();
+    assert_eq!(
+        grid.to_string(),
+        concat!(
+            "#######\n",
+            "#######\n",
+            "#######\n",
+            "..#####\n",
+            "..#####\n",
+            "#######\n",
+            "#####..\n",
+            "#######\n",
+            ".######\n",
+            ".######\n",
+        )
+    );
+}
+
+fn part1(plan: &[Instruction]) -> i64 {
+    let mut grid = dig_trenches(plan);
+    grid.excavate_interior();
+    grid.capacity()
+}
+
+#[test]
+fn test_example_part1() {
+    let plan = parse_input(get_example()).expect("example should be valid");
+    assert_eq!(part1(&plan), 62);
+}
+
+fn main() {
+    let input = str::from_utf8(include_bytes!("input.txt")).unwrap();
+    let plan = parse_input(input).expect("input should be valid");
+    println!("day 16 part 1: {}", part1(&plan));
+}

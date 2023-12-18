@@ -1,6 +1,8 @@
 use std::cmp::{max, min};
 use std::fmt::{self, Debug, Display, Formatter, Write};
 
+use itertools::Itertools;
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum CompassDirection {
     North,
@@ -157,6 +159,14 @@ impl BoundingBox {
         }
     }
 
+    pub fn columns(&self) -> impl Iterator<Item = i64> + Clone {
+        self.top_left.x..=self.bottom_right.x
+    }
+
+    pub fn rows(&self) -> impl Iterator<Item = i64> + Clone {
+        self.top_left.y..=self.bottom_right.y
+    }
+
     pub fn width(&self) -> i64 {
         1 + self.bottom_right.x - self.top_left.x
     }
@@ -167,6 +177,32 @@ impl BoundingBox {
 
     pub fn area(&self) -> i64 {
         self.width() * self.height()
+    }
+
+    pub fn perimeter(&self) -> impl Iterator<Item = Position> + '_ {
+        let top = (self.top_left.x..self.bottom_right.x).map(|x| Position {
+            x,
+            y: self.top_left.y,
+        });
+        let bottom = (self.top_left.x..self.bottom_right.x).map(|x| Position {
+            x,
+            y: self.bottom_right.y,
+        });
+        let left = (self.top_left.y..self.bottom_right.y).map(|y| Position {
+            x: self.top_left.x,
+            y,
+        });
+        let right = (self.top_left.y..self.bottom_right.y).map(|y| Position {
+            x: self.bottom_right.x,
+            y,
+        });
+        left.chain(right).chain(top).chain(bottom)
+    }
+
+    pub fn surface(&self) -> impl Iterator<Item = Position> + '_ {
+        self.rows()
+            .cartesian_product(self.columns())
+            .map(|(y, x)| Position { x, y })
     }
 
     pub fn update(&mut self, pos: &Position) {
