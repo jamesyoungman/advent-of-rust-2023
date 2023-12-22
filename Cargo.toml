@@ -18,6 +18,9 @@ lazy_static = "1"
 [dev-dependencies]
 criterion = "0.5"
 
+[profile.release]
+debug = true
+
 [lib]
 name = "lib"
 path = "src/lib/lib.rs"

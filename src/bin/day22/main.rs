@@ -1,4 +1,4 @@
-use std::cmp::{max, min};
+use std::cmp::{max, min, Ordering};
 use std::collections::{BTreeMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::str;
@@ -191,6 +191,11 @@ fn brick_equality() {
 }
 
 impl Brick {
+    fn fall(&mut self, dz: i64) {
+        self.lower.z -= dz;
+        self.upper.z -= dz;
+    }
+
     fn plan(&self) -> BoundingBox {
         BoundingBox {
             top_left: Position {
@@ -298,15 +303,11 @@ impl Surface {
                     if *existing_height >= z {
                         panic!("shape with bottom at {z} fell too far at {pos}");
                     } else {
-                        //println!("updated height at {pos} is {z}");
                         *existing_height = z;
                         *existing_index = index;
                     }
                 })
-                .or_insert_with(|| {
-                    //println!("new height at {pos} is {z}");
-                    (z, index)
-                });
+                .or_insert_with(|| (z, index));
         }
     }
 }
@@ -346,30 +347,27 @@ fn identify_supporting_bricks(
 ) -> Option<(i64, HashSet<usize>)> {
     match acc {
         None => Some((h, just(maybe_index))),
-        Some((existing_height, mut bricks)) => {
-            if existing_height < h {
-                Some((h, just(maybe_index)))
-            } else if existing_height == h {
+        Some((existing_height, mut bricks)) => match existing_height.cmp(&h) {
+            Ordering::Less => Some((h, just(maybe_index))),
+            Ordering::Equal => {
                 if let Some(i) = maybe_index {
                     bricks.insert(i);
                 }
                 Some((h, bricks))
-            } else {
-                Some((existing_height, bricks))
             }
-        }
+            Ordering::Greater => Some((existing_height, bricks)),
+        },
     }
 }
 
-fn compute_fallen_brick_positions(bricks: &[Brick]) -> (Vec<Brick>, HashSet<usize>) {
-    //let labels: Vec<String> = bricks
-    //    .iter()
-    //    .enumerate()
-    //    .map(|(ix, brick)| match brick.label.as_ref() {
-    //        Some(label) => label.to_string(),
-    //        None => format!("{}", ix),
-    //    })
-    //    .collect();
+fn compute_fallen_brick_positions<IgnorePredicate>(
+    bricks: &[Brick],
+    ignore: IgnorePredicate,
+) -> (usize, Vec<Brick>, HashSet<usize>)
+where
+    IgnorePredicate: Fn(usize) -> bool,
+{
+    let mut bricks_with_changed_z = 0;
     let mut indexed_bricks: Vec<(Brick, usize)> = bricks
         .iter()
         .enumerate()
@@ -378,11 +376,12 @@ fn compute_fallen_brick_positions(bricks: &[Brick]) -> (Vec<Brick>, HashSet<usiz
     let mut can_disintegrate: HashSet<usize> = HashSet::new();
     indexed_bricks.sort(); // by z-height
     let mut heightmap = Surface::default();
-    for (brick, index) in indexed_bricks.iter_mut() {
+    for (brick, index) in indexed_bricks
+        .iter_mut()
+        .filter(|(_, index)| !ignore(*index))
+    {
         can_disintegrate.insert(*index);
         let brick_xy_bbox = brick.plan();
-        //println!();
-        //println!("brick {brick:?} is falling; its xy bounding box is {brick_xy_bbox:?}");
         if let Some((highest_ground, supporting_bricks)) =
             brick_xy_bbox.surface().fold(None, |acc, pos| {
                 let (h, maybe_index) = heightmap.get(&pos);
@@ -391,53 +390,40 @@ fn compute_fallen_brick_positions(bricks: &[Brick]) -> (Vec<Brick>, HashSet<usiz
         {
             // Suppose the "ground" at this point has z=1.  Then,
             // the bottom of this brick will come to rest at z=2.
-            let resting_z = highest_ground + 1;
-            let fell_by = brick.lower.z - resting_z;
+            let fell_by = brick.lower.z - (highest_ground + 1);
+            if fell_by > 0 {
+                bricks_with_changed_z += 1;
+            }
 
             // If the brick is 2 units high then the top of the
             // brick will be at z=3 (the brick occupying the
             // levels z=2 and z=3).
-            brick.lower.z -= fell_by;
-            brick.upper.z -= fell_by;
-            //println!("the highest existing surface level within that box is {highest_ground} so it comes to rest after a fall of {fell_by} at z={}: {brick:?}", brick.lower.z);
+            brick.fall(fell_by);
             heightmap.set_height(&brick_xy_bbox, brick.upper.z, *index);
-            //let supporting_labels: Vec<&str> = supporting_bricks
-            //    .iter()
-            //    .map(|ix| labels[*ix].as_str())
-            //    .collect();
-            match supporting_bricks.len() {
-                0 => (),
-                1 => {
-                    //println!("brick {supporting_labels:?} cannot be disintegrated as it is the only support for {brick}");
-                    for supporting_brick_index in supporting_bricks.into_iter() {
-                        can_disintegrate.remove(&supporting_brick_index);
-                    }
-                }
-                _ => {
-                    //println!(
-                    //    "bricks {supporting_labels:?} can be disintegrated as {brick} is multiply suported"
-                    //);
+
+            if supporting_bricks.len() == 1 {
+                for supporting_brick_index in supporting_bricks.into_iter() {
+                    can_disintegrate.remove(&supporting_brick_index);
                 }
             }
         } else {
             panic!("brick {brick} has zero area in the xy plane");
         }
     }
+
     let fallen_bricks: Vec<Brick> = indexed_bricks.into_iter().map(|(brick, _)| brick).collect();
-    //println!(
-    //    "We can disintegrate {:?}",
-    //    can_disintegrate
-    //        .iter()
-    //        .map(|ix| labels[*ix].as_str())
-    //        .collect::<Vec<&str>>()
-    //);
-    (fallen_bricks, can_disintegrate)
+    (bricks_with_changed_z, fallen_bricks, can_disintegrate)
+}
+
+fn ignore_none(_: usize) -> bool {
+    false
 }
 
 #[test]
 fn example_compute_fallen_brick_positions() {
-    let (bricks, can_disintegrate) = compute_fallen_brick_positions(
+    let (_, bricks, can_disintegrate) = compute_fallen_brick_positions(
         &parse_input(get_labeled_example()).expect("example should be valid"),
+        ignore_none,
     );
     assert!(bricks.contains(&Brick {
         // A (which didn't move)
@@ -475,7 +461,7 @@ fn example_compute_fallen_brick_positions() {
         upper: Position3 { x: 2, y: 1, z: 4 },
         label: Some("F".to_string()),
     }));
-    dbg!(&bricks);
+
     assert!(bricks.contains(&Brick {
         // G fell from z=8 (top being z=9) to z=5
         lower: Position3 { x: 1, y: 1, z: 5 },
@@ -486,8 +472,20 @@ fn example_compute_fallen_brick_positions() {
     assert_eq!(can_disintegrate.len(), 5);
 }
 
+fn part1_and_2(bricks: &[Brick]) -> (usize, usize) {
+    let (_, fallen_bricks, can_disintegrate) = compute_fallen_brick_positions(bricks, ignore_none);
+    let mut additional_fallers = 0;
+    for ignore_index in 0..bricks.len() {
+        let ignore = |ix| ix == ignore_index;
+        let (fallcount, _, _) = compute_fallen_brick_positions(&fallen_bricks, ignore);
+        additional_fallers += fallcount;
+    }
+    (can_disintegrate.len(), additional_fallers)
+}
+
+#[cfg(test)]
 fn part1(bricks: &[Brick]) -> usize {
-    compute_fallen_brick_positions(bricks).1.len()
+    part1_and_2(bricks).0
 }
 
 #[test]
@@ -496,8 +494,21 @@ fn test_part1() {
     assert_eq!(part1(&bricks), 5);
 }
 
+#[cfg(test)]
+fn part2(bricks: &[Brick]) -> usize {
+    part1_and_2(bricks).1
+}
+
+#[test]
+fn test_part2() {
+    let bricks = parse_input(get_labeled_example()).expect("example should be valid");
+    assert_eq!(part2(&bricks), 7);
+}
+
 fn main() {
     let input = str::from_utf8(include_bytes!("input.txt")).unwrap();
     let bricks = parse_input(input).expect("puzz input should be valid");
-    println!("day 22 part 1: {}", part1(&bricks));
+    let (p1, p2) = part1_and_2(&bricks);
+    println!("day 22 part 1: {}", p1);
+    println!("day 22 part 2: {}", p2);
 }
